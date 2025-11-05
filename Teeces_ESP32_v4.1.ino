@@ -436,6 +436,12 @@ void printDisplayHelp();
 void printBootTextHelp();
 void printFullHelp();
 
+// Helper functions for safe serial input
+bool readSerialLineWithTimeout(char* buffer, size_t bufferSize, unsigned long timeoutMs);
+void trimString(char* str);
+int strcasecmp_safe(const char* s1, const char* s2);
+bool startsWith(const char* str, const char* prefix);
+
 // =======================================================================================
 // SETUP
 // =======================================================================================
@@ -443,10 +449,42 @@ void printFullHelp();
 void setup() {
   Serial.begin(9600);
   while (!Serial && millis() < 3000) delay(10);
-  
-  if (!preferences.begin("teeces-config", false)) {
-    Serial.println(F("ERROR: Failed to initialize flash storage!"));
-    while(1) delay(1000);
+
+  // Initialize watchdog early to prevent infinite loops
+  esp_task_wdt_deinit();
+  esp_task_wdt_config_t wdt_config = {
+    .timeout_ms = WDT_TIMEOUT_MS,
+    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+    .trigger_panic = true
+  };
+  ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_config));
+  ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
+
+  // Try to initialize flash storage with retry logic
+  bool flashInitialized = false;
+  for (int retry = 0; retry < 3; retry++) {
+    esp_task_wdt_reset();
+    if (preferences.begin("teeces-config", false)) {
+      flashInitialized = true;
+      break;
+    }
+    Serial.print(F("Flash init attempt "));
+    Serial.print(retry + 1);
+    Serial.println(F(" failed, retrying..."));
+    delay(500);
+  }
+
+  if (!flashInitialized) {
+    Serial.println(F("ERROR: Failed to initialize flash storage after 3 attempts!"));
+    Serial.println(F("System will restart in 5 seconds..."));
+    for (int i = 5; i > 0; i--) {
+      esp_task_wdt_reset();
+      Serial.print(i);
+      Serial.print(F("... "));
+      delay(1000);
+    }
+    Serial.println(F("\nRestarting..."));
+    ESP.restart();
   }
 
   Serial.println(F("\n╔══════════════════════════════════════════════════════════╗"));
@@ -519,22 +557,12 @@ void setup() {
   if (firstTimeSetup) {
     showSmartSuggestion("first_time");
   }
-  
-  Serial.print(F("> "));
 
-  // Watchdog
-  esp_task_wdt_deinit();
-  esp_task_wdt_config_t wdt_config = {
-    .timeout_ms = WDT_TIMEOUT_MS,
-    .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
-    .trigger_panic = true
-  };
-  ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_config));
-  ESP_ERROR_CHECK(esp_task_wdt_add(NULL));
   Serial.print(F("Watchdog enabled ("));
   Serial.print(WDT_TIMEOUT_MS / 1000);
   Serial.println(F("s timeout)."));
   Serial.println();
+  Serial.print(F("> "));
 }
 
 // =======================================================================================
@@ -634,22 +662,23 @@ void loadProfileDefaults(byte profileNum, ConfigSettings &cfg) {
   cfg.digitalPsi2_color2_index = 2;
   
   if (profileNum == 1) {
-    strncpy(cfg.TFLDtext, "PROFILE 1", BOOT_TEXT_SIZE);
-    strncpy(cfg.BFLDtext, " STANDARD", BOOT_TEXT_SIZE);
-    strncpy(cfg.RLDtext, "BOOTING ASTROMECH   ", BOOT_TEXT_SIZE);
+    strncpy(cfg.TFLDtext, "PROFILE 1", BOOT_TEXT_SIZE - 1);
+    strncpy(cfg.BFLDtext, " STANDARD", BOOT_TEXT_SIZE - 1);
+    strncpy(cfg.RLDtext, "BOOTING ASTROMECH   ", BOOT_TEXT_SIZE - 1);
   } else if (profileNum == 2) {
-    strncpy(cfg.TFLDtext, "PROFILE 2", BOOT_TEXT_SIZE);
-    strncpy(cfg.BFLDtext, "  CUSTOM ", BOOT_TEXT_SIZE);
-    strncpy(cfg.RLDtext, "WHITE PINK MODE     ", BOOT_TEXT_SIZE);
+    strncpy(cfg.TFLDtext, "PROFILE 2", BOOT_TEXT_SIZE - 1);
+    strncpy(cfg.BFLDtext, "  CUSTOM ", BOOT_TEXT_SIZE - 1);
+    strncpy(cfg.RLDtext, "WHITE PINK MODE     ", BOOT_TEXT_SIZE - 1);
     cfg.digitalPsi1_color1_index = 11;
     cfg.digitalPsi1_color2_index = 8;
     cfg.digitalPsi2_color1_index = 11;
     cfg.digitalPsi2_color2_index = 8;
   } else {
     snprintf(cfg.TFLDtext, BOOT_TEXT_SIZE, "PROFILE %d", profileNum);
-    strncpy(cfg.BFLDtext, "   USER  ", BOOT_TEXT_SIZE);
-    strncpy(cfg.RLDtext, "USER PROFILE        ", BOOT_TEXT_SIZE);
+    strncpy(cfg.BFLDtext, "   USER  ", BOOT_TEXT_SIZE - 1);
+    strncpy(cfg.RLDtext, "USER PROFILE        ", BOOT_TEXT_SIZE - 1);
   }
+  // Ensure null-termination
   cfg.TFLDtext[BOOT_TEXT_SIZE - 1] = '\0';
   cfg.BFLDtext[BOOT_TEXT_SIZE - 1] = '\0';
   cfg.RLDtext[BOOT_TEXT_SIZE - 1] = '\0';
@@ -1059,35 +1088,51 @@ void clearGrid(byte display) {
   }
 }
 
+// Display the LED grid on the physical hardware
+// The grid is stored as a long value per row, with each bit representing an LED
+// Complex bit operations handle the mapping from logical grid to physical display
 void showGrid(byte display) {
   if (!isValidDisplayIndex(display)) return;
+
+  // Overflow columns (9th, 18th, 27th) need special handling
   unsigned char col8 = 0, col17 = 0, col26 = 0;
+
   switch (display) {
-    case 0:
+    case 0:  // Top Front Logic Display (TFLD)
       for (byte row = 0; row < 5; row++) {
+        // Extract first 8 bits, reverse them (hardware wiring), and send to device
         lcFront.setRow(0, row, rev(LEDgrid[display][row] & 255L));
+        // Check if 9th column (bit 8) is set and accumulate into overflow column
         if ((LEDgrid[display][row] & (1L << 8)) == (1L << 8))
-          col8 += 128 >> row;
+          col8 += 128 >> row;  // Build vertical column byte from row bits
       }
-      lcFront.setRow(0, 5, col8);
+      lcFront.setRow(0, 5, col8);  // Send overflow column to row 5
       break;
-    case 1:
+
+    case 1:  // Bottom Front Logic Display (BFLD)
       for (byte row = 0; row < 5; row++) {
+        // Extract bits 1-8 (shift right by 1) and send to device in reverse row order
         lcFront.setRow(1, 4 - row, (LEDgrid[display][row] & (255L << 1)) >> 1);
+        // Check if 1st column (bit 0) is set for overflow
         if ((LEDgrid[display][row] & 1L) == 1L)
-          col8 += 8 << row;
+          col8 += 8 << row;  // Build vertical column starting at bit 3
       }
-      lcFront.setRow(1, 5, col8);
+      lcFront.setRow(1, 5, col8);  // Send overflow column
       break;
-    case 2:
+
+    case 2:  // Rear Logic Display (RLD) - 3 chained devices, 27 columns total
       for (byte row = 0; row < 5; row++) {
+        // Split 27-bit grid across 3 MAX7219 devices (9 columns each)
         for (byte dev = 0; dev < 3; dev++) {
+          // Extract 8 bits for this device (offset by dev*9), reverse, and send
           lcRear.setRow(dev, row, rev((LEDgrid[display][row] & (255L << (9 * dev))) >> (9 * dev)));
         }
+        // Handle overflow columns (9th, 18th, 27th) for each device
         if ((LEDgrid[display][row] & (1L << 8)) == (1L << 8)) col8 += 128 >> row;
         if ((LEDgrid[display][row] & (1L << 17)) == (1L << 17)) col17 += 128 >> row;
         if ((LEDgrid[display][row] & (1L << 26)) == (1L << 26)) col26 += 128 >> row;
       }
+      // Send overflow columns to each device
       lcRear.setRow(0, 5, col8);
       lcRear.setRow(1, 5, col17);
       lcRear.setRow(2, 5, col26);
@@ -1095,14 +1140,17 @@ void showGrid(byte display) {
   }
 }
 
+// Reverse bit order of a byte using lookup table
+// Required because LED matrix hardware is wired with reversed bit order
 uint8_t rev(uint8_t n) {
+  // Swap nibbles and reverse bits within each using lookup table
   return (pgm_read_byte(&revlookup[n & 0x0F]) << 4) | pgm_read_byte(&revlookup[n >> 4]);
 }
 
 void setText(byte disp, const char* message) {
   if (!isValidDisplayIndex(disp)) return;
   strncpy(logicText[disp], message, MAXSTRINGSIZE);
-  logicText[disp][MAXSTRINGSIZE] = 0;
+  logicText[disp][MAXSTRINGSIZE] = '\0';  // Ensure null-termination
 }
 
 // =======================================================================================
@@ -1461,7 +1509,8 @@ byte buildCommand(char ch, char* output_str) {
       output_str[pos] = ch;
       pos++;
     } else {
-      Serial.write(0x7);
+      // Send BEL (bell) character to indicate buffer overflow
+      Serial.write(0x7);  // ASCII BEL - audible alert for terminal
     }
   }
   return false;
@@ -1469,71 +1518,107 @@ byte buildCommand(char ch, char* output_str) {
 
 void parseCommand(char* inputStr) {
   byte hasArgument = false;
-  int argument, address;
+  int argument = 0, address = 0;
   byte pos = 0;
   byte length = strlen(inputStr);
-  
-  if (length < 2) goto beep;
-  
-  char addrStr[3];
-  if (!isdigit(inputStr[pos])) goto beep;
-  addrStr[pos] = inputStr[pos];
-  pos++;
-  
-  if (isdigit(inputStr[pos])) {
-    addrStr[pos] = inputStr[pos];
-    pos++;
+
+  // Validation: minimum length
+  if (length < 2) {
+    Serial.write(0x7);  // BEL - invalid command
+    return;
   }
-  addrStr[pos] = '\0';
+
+  // Parse address (1 or 2 digits)
+  char addrStr[3];
+  if (!isdigit(inputStr[pos])) {
+    Serial.write(0x7);
+    return;
+  }
+  addrStr[0] = inputStr[pos];
+  pos++;
+
+  if (pos < length && isdigit(inputStr[pos])) {
+    addrStr[1] = inputStr[pos];
+    addrStr[2] = '\0';
+    pos++;
+  } else {
+    addrStr[1] = '\0';
+  }
   address = atoi(addrStr);
-  
-  if (pos >= length) goto beep;
-  
+
+  // Validation: must have command character
+  if (pos >= length) {
+    Serial.write(0x7);
+    return;
+  }
+
+  // Handle 'M' command (text message) separately - it doesn't require numeric argument
   if (inputStr[pos] == 'M') {
     pos++;
-    if (pos >= length) goto beep;
+    if (pos >= length) {
+      Serial.write(0x7);
+      return;
+    }
     doMcommand(address, inputStr + pos);
     return;
   }
-  
+
+  // Store command character
+  char command = inputStr[pos];
   pos++;
+
+  // Parse numeric argument if present
   if (pos >= length) {
     hasArgument = false;
   } else {
+    // Validate that remaining characters are digits
     for (byte i = pos; i < length; i++) {
-      if (!isdigit(inputStr[i])) goto beep;
+      if (!isdigit(inputStr[i])) {
+        Serial.write(0x7);
+        return;
+      }
     }
     argument = atoi(inputStr + pos);
     hasArgument = true;
   }
-  
-  switch (inputStr[pos - 1]) {
+
+  // Execute command based on type
+  switch (command) {
     case 'T':
-      if (hasArgument) doTcommand(address, argument);
-      else goto beep;
+      if (hasArgument) {
+        doTcommand(address, argument);
+      } else {
+        Serial.write(0x7);
+      }
       break;
     case 'D':
       doDcommand(address);
       break;
     case 'P':
-      if (hasArgument) doPcommand(address, argument);
-      else goto beep;
+      if (hasArgument) {
+        doPcommand(address, argument);
+      } else {
+        Serial.write(0x7);
+      }
       break;
     case 'R':
-      if (hasArgument) doRcommand(address, argument);
-      else goto beep;
+      if (hasArgument) {
+        doRcommand(address, argument);
+      } else {
+        Serial.write(0x7);
+      }
       break;
     case 'S':
-      if (hasArgument) doScommand(address, argument);
-      else goto beep;
+      if (hasArgument) {
+        doScommand(address, argument);
+      } else {
+        Serial.write(0x7);
+      }
       break;
     default:
-      goto beep;
+      Serial.write(0x7);
+      break;
   }
-  return;
-  
-beep:
-  Serial.write(0x7);
 }
 
 void doMcommand(int address, char* message) {
@@ -2121,6 +2206,102 @@ void applyPreset(byte presetNum) {
 }
 
 // =======================================================================================
+// HELPER FUNCTIONS FOR SAFE SERIAL INPUT
+// =======================================================================================
+
+// Trim leading and trailing whitespace from a string
+void trimString(char* str) {
+  if (str == nullptr || *str == '\0') return;
+
+  // Trim leading whitespace
+  char* start = str;
+  while (*start && (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n')) {
+    start++;
+  }
+
+  // Trim trailing whitespace
+  char* end = start + strlen(start) - 1;
+  while (end > start && (*end == ' ' || *end == '\t' || *end == '\r' || *end == '\n')) {
+    *end = '\0';
+    end--;
+  }
+
+  // Shift string if needed
+  if (start != str) {
+    memmove(str, start, strlen(start) + 1);
+  }
+}
+
+// Case-insensitive string comparison
+int strcasecmp_safe(const char* s1, const char* s2) {
+  while (*s1 && *s2) {
+    char c1 = tolower(*s1);
+    char c2 = tolower(*s2);
+    if (c1 != c2) return c1 - c2;
+    s1++;
+    s2++;
+  }
+  return tolower(*s1) - tolower(*s2);
+}
+
+// Check if string starts with prefix
+bool startsWith(const char* str, const char* prefix) {
+  size_t lenstr = strlen(str);
+  size_t lenprefix = strlen(prefix);
+  if (lenstr < lenprefix) return false;
+  return strncmp(str, prefix, lenprefix) == 0;
+}
+
+// Sanitize text input - allow only printable ASCII characters (32-126)
+void sanitizeText(char* str) {
+  if (str == nullptr) return;
+
+  for (char* p = str; *p; p++) {
+    // Replace non-printable characters with space
+    if (*p < 32 || *p > 126) {
+      *p = ' ';
+    }
+  }
+}
+
+// Read a line from serial with timeout (replaces String.readStringUntil)
+// Returns true if successful, false on timeout
+bool readSerialLineWithTimeout(char* buffer, size_t bufferSize, unsigned long timeoutMs) {
+  unsigned long startTime = millis();
+  size_t index = 0;
+
+  buffer[0] = '\0';  // Start with empty string
+
+  while (true) {
+    esp_task_wdt_reset();
+
+    // Check timeout
+    if (millis() - startTime > timeoutMs) {
+      buffer[index] = '\0';
+      return false;  // Timeout
+    }
+
+    if (Serial.available()) {
+      char c = Serial.read();
+
+      // Line endings
+      if (c == '\n' || c == '\r') {
+        buffer[index] = '\0';
+        trimString(buffer);
+        return true;
+      }
+
+      // Store character if there's space
+      if (index < bufferSize - 1) {
+        buffer[index++] = c;
+      }
+    }
+
+    delay(10);  // Small delay to prevent tight loop
+  }
+}
+
+// =======================================================================================
 // NEW v4.1: SETUP WIZARD
 // =======================================================================================
 
@@ -2143,16 +2324,17 @@ void runSetupWizard() {
   Serial.println(F("  2 = Digital PSI (NeoPixel/WS2812B strips with any color)"));
   Serial.println(F("\nRecommended: Digital PSI (more features)"));
   Serial.print(F("\nYour choice (1 or 2): "));
-  
-  while (!Serial.available()) {
-    esp_task_wdt_reset();
-    delay(100);
+
+  char psiChoice[16];
+  if (!readSerialLineWithTimeout(psiChoice, sizeof(psiChoice), 60000)) {
+    // Timeout - use default
+    strcpy(psiChoice, "2");
+    Serial.println(F("Timeout - using default: 2 (Digital)"));
+  } else {
+    Serial.println(psiChoice);
   }
-  String psiChoice = Serial.readStringUntil('\n');
-  psiChoice.trim();
-  Serial.println(psiChoice);
-  
-  if (psiChoice == "2") {
+
+  if (strcmp(psiChoice, "2") == 0) {
     globalPsiOutput = PSI_DIGITAL;
     preferences.putUChar("psiOutput", PSI_DIGITAL);
     Serial.println(F("✓ Digital PSI selected!"));
@@ -2173,19 +2355,20 @@ void runSetupWizard() {
   Serial.println(F("  2 = Normal lighting (brightness 6-9)"));
   Serial.println(F("  3 = Bright/outdoor (brightness 10-15)"));
   Serial.print(F("\nYour choice (1-3): "));
-  
-  while (!Serial.available()) {
-    esp_task_wdt_reset();
-    delay(100);
+
+  char brightChoice[16];
+  if (!readSerialLineWithTimeout(brightChoice, sizeof(brightChoice), 60000)) {
+    // Timeout - use default
+    strcpy(brightChoice, "2");
+    Serial.println(F("Timeout - using default: 2 (Normal)"));
+  } else {
+    Serial.println(brightChoice);
   }
-  String brightChoice = Serial.readStringUntil('\n');
-  brightChoice.trim();
-  Serial.println(brightChoice);
-  
+
   byte brightness = 8;
-  if (brightChoice == "1") brightness = 4;
-  else if (brightChoice == "2") brightness = 8;
-  else if (brightChoice == "3") brightness = 12;
+  if (strcmp(brightChoice, "1") == 0) brightness = 4;
+  else if (strcmp(brightChoice, "2") == 0) brightness = 8;
+  else if (strcmp(brightChoice, "3") == 0) brightness = 12;
   
   currentSettings.rldBrightness = brightness;
   currentSettings.fldBrightness = brightness;
@@ -2209,20 +2392,21 @@ void runSetupWizard() {
     Serial.println(F("  3 = Modern (White/Pink)"));
     Serial.println(F("  4 = Rainbow (Cyan/Magenta)"));
     Serial.print(F("\nYour choice (1-4): "));
-    
-    while (!Serial.available()) {
-      esp_task_wdt_reset();
-      delay(100);
+
+    char colorChoice[16];
+    if (!readSerialLineWithTimeout(colorChoice, sizeof(colorChoice), 60000)) {
+      // Timeout - use default
+      strcpy(colorChoice, "1");
+      Serial.println(F("Timeout - using default: 1 (Classic)"));
+    } else {
+      Serial.println(colorChoice);
     }
-    String colorChoice = Serial.readStringUntil('\n');
-    colorChoice.trim();
-    Serial.println(colorChoice);
-    
+
     byte color1 = 1, color2 = 3;
-    if (colorChoice == "1") { color1 = 1; color2 = 3; }
-    else if (colorChoice == "2") { color1 = 0; color2 = 2; }
-    else if (colorChoice == "3") { color1 = 11; color2 = 8; }
-    else if (colorChoice == "4") { color1 = 4; color2 = 5; }
+    if (strcmp(colorChoice, "1") == 0) { color1 = 1; color2 = 3; }
+    else if (strcmp(colorChoice, "2") == 0) { color1 = 0; color2 = 2; }
+    else if (strcmp(colorChoice, "3") == 0) { color1 = 11; color2 = 8; }
+    else if (strcmp(colorChoice, "4") == 0) { color1 = 4; color2 = 5; }
     
     currentSettings.digitalPsi1_color1_index = color1;
     currentSettings.digitalPsi1_color2_index = color2;
@@ -2251,16 +2435,17 @@ void runSetupWizard() {
   Serial.println(F("  4 = User Profile 2"));
   Serial.println(F("  5 = User Profile 3"));
   Serial.print(F("\nYour choice (3-5): "));
-  
-  while (!Serial.available()) {
-    esp_task_wdt_reset();
-    delay(100);
+
+  char profileChoice[16];
+  if (!readSerialLineWithTimeout(profileChoice, sizeof(profileChoice), 60000)) {
+    // Timeout - use default
+    strcpy(profileChoice, "3");
+    Serial.println(F("Timeout - using default: 3"));
+  } else {
+    Serial.println(profileChoice);
   }
-  String profileChoice = Serial.readStringUntil('\n');
-  profileChoice.trim();
-  Serial.println(profileChoice);
-  
-  byte profileNum = profileChoice.toInt();
+
+  byte profileNum = atoi(profileChoice);
   if (profileNum >= 3 && profileNum <= 5) {
     loadProfile(profileNum);
     
@@ -2596,62 +2781,82 @@ void handleConfigCommands() {
   }
   
   if (Serial.available()) {
-    String command = Serial.readStringUntil('\r');
-    command.trim();
-    if (command.length() == 0) {
+    char command[128];
+    // Read command with carriage return as terminator
+    size_t idx = 0;
+    unsigned long startTime = millis();
+    bool commandReady = false;
+
+    while (millis() - startTime < 100 && !commandReady) {
+      if (Serial.available()) {
+        char c = Serial.read();
+        if (c == '\r' || c == '\n') {
+          command[idx] = '\0';
+          commandReady = true;
+        } else if (idx < sizeof(command) - 1) {
+          command[idx++] = c;
+        }
+      }
+    }
+
+    if (!commandReady) {
+      command[idx] = '\0';
+    }
+
+    trimString(command);
+    if (strlen(command) == 0) {
       Serial.print(F("Config> "));
       return;
     }
     Serial.println(command);
-    
+
     // Number shortcuts for help topics
-    if (command == "1" || command.equalsIgnoreCase("profile")) {
+    if (strcmp(command, "1") == 0 || strcasecmp_safe(command, "profile") == 0) {
       printProfileHelp();
     }
-    else if (command == "2" || command.equalsIgnoreCase("psi")) {
+    else if (strcmp(command, "2") == 0 || strcasecmp_safe(command, "psi") == 0) {
       printPsiHelp();
     }
-    else if (command == "3" || command.equalsIgnoreCase("display")) {
+    else if (strcmp(command, "3") == 0 || strcasecmp_safe(command, "display") == 0) {
       printDisplayHelp();
     }
-    else if (command == "4" || command.equalsIgnoreCase("boot")) {
+    else if (strcmp(command, "4") == 0 || strcasecmp_safe(command, "boot") == 0) {
       printBootTextHelp();
     }
     // NEW: Wizard command
-    else if (command.equalsIgnoreCase("wizard")) {
+    else if (strcasecmp_safe(command, "wizard") == 0) {
       runSetupWizard();
     }
     // NEW: Diagnostics command
-    else if (command.equalsIgnoreCase("diagnostics") || command.equalsIgnoreCase("diag")) {
+    else if (strcasecmp_safe(command, "diagnostics") == 0 || strcasecmp_safe(command, "diag") == 0) {
       runDiagnostics();
     }
     // NEW: Presets commands
-    else if (command.equalsIgnoreCase("presets")) {
+    else if (strcasecmp_safe(command, "presets") == 0) {
       showPresets();
     }
-    else if (command.startsWith("preset ")) {
-      String arg = command.substring(7);
-      int presetNum = arg.toInt();
+    else if (startsWith(command, "preset ")) {
+      int presetNum = atoi(command + 7);
       applyPreset(presetNum);
     }
     // Profile commands
-    else if (command.startsWith("profile ")) {
-      String subCommand = command.substring(8);
-      if (subCommand.startsWith("load ")) {
-        int profileNum = subCommand.substring(5).toInt();
+    else if (startsWith(command, "profile ")) {
+      const char* subCommand = command + 8;
+      if (startsWith(subCommand, "load ")) {
+        int profileNum = atoi(subCommand + 5);
         if (profileNum >= 1 && profileNum <= NUM_PROFILES) {
           loadProfile(profileNum);
           showSmartSuggestion("profile_loaded");
         } else {
           Serial.println(F("✗ Invalid profile number. Use 1-5."));
         }
-      } else if (subCommand == "save") {
+      } else if (strcmp(subCommand, "save") == 0) {
         saveCurrentProfile();
         hasUnsavedChanges = false;
-      } else if (subCommand.startsWith("reset ")) {
-        int profileNum = subCommand.substring(6).toInt();
+      } else if (startsWith(subCommand, "reset ")) {
+        int profileNum = atoi(subCommand + 6);
         resetProfile(profileNum);
-      } else if (subCommand == "show") {
+      } else if (strcmp(subCommand, "show") == 0) {
         Serial.print(F("Active profile: "));
         Serial.print(activeProfileIndex + 1);
         Serial.println(activeProfileIndex < 2 ? F(" (read-only)") : F(" (editable)"));
@@ -2660,15 +2865,15 @@ void handleConfigCommands() {
       }
     }
     // Show settings
-    else if (command == "show") {
+    else if (strcmp(command, "show") == 0) {
       showSettings();
     }
     // Set parameter (with NEW validation and suggestions)
-    else if (command.startsWith("set ")) {
-      parseAndSetSetting(command.c_str());
+    else if (startsWith(command, "set ")) {
+      parseAndSetSetting(command);
     }
     // Colors list
-    else if (command == "colors") {
+    else if (strcmp(command, "colors") == 0) {
       Serial.println(F("\n╔══════════════════════════════════════════╗"));
       Serial.println(F("║     DIGITAL PSI COLOR PALETTE            ║"));
       Serial.println(F("╚══════════════════════════════════════════╝"));
@@ -2682,11 +2887,11 @@ void handleConfigCommands() {
       Serial.println(F("\nUsage: set psi1_color1 <number>"));
     }
     // Help
-    else if (command == "help" || command == "?") {
+    else if (strcmp(command, "help") == 0 || strcmp(command, "?") == 0) {
       printFullHelp();
     }
     // Exit
-    else if (command == "exit" || command == "quit") {
+    else if (strcmp(command, "exit") == 0 || strcmp(command, "quit") == 0) {
       if (hasUnsavedChanges) {
         showSmartSuggestion("unsaved_changes");
         Serial.println(F("Type 'exit' again to discard, or 'profile save' first."));
@@ -2831,14 +3036,17 @@ void parseAndSetSetting(const char* cmd) {
   }
   // BOOT TEXT SETTINGS
   else if (strcmp(paramName, "boot_tfld") == 0) {
+    sanitizeText(valueStr);  // Remove non-printable characters
     strncpy(currentSettings.TFLDtext, valueStr, BOOT_TEXT_SIZE - 1);
     currentSettings.TFLDtext[BOOT_TEXT_SIZE - 1] = '\0';
   }
   else if (strcmp(paramName, "boot_bfld") == 0) {
+    sanitizeText(valueStr);  // Remove non-printable characters
     strncpy(currentSettings.BFLDtext, valueStr, BOOT_TEXT_SIZE - 1);
     currentSettings.BFLDtext[BOOT_TEXT_SIZE - 1] = '\0';
   }
   else if (strcmp(paramName, "boot_rld") == 0) {
+    sanitizeText(valueStr);  // Remove non-printable characters
     strncpy(currentSettings.RLDtext, valueStr, BOOT_TEXT_SIZE - 1);
     currentSettings.RLDtext[BOOT_TEXT_SIZE - 1] = '\0';
   }
