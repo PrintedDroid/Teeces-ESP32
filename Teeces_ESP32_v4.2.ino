@@ -590,6 +590,26 @@ void setup() {
   }
 
   resetDisplays();
+
+  // Initialize PSIs to start in random mode
+  psiState[0] = PSI_RANDOM;
+  psiState[1] = PSI_RANDOM;
+
+  // Activate PSIs immediately at startup
+  if (globalPsiOutput == PSI_DIGITAL) {
+    PsiConfig psiCfg = getPsiConfig();
+
+    // Show initial pattern immediately using setDigitalPsi instead of random animation
+    setDigitalPsi(*psiCfg.frontStrip, PSI_COLOR1, psiCfg.frontColor1, psiCfg.frontColor2);
+    setDigitalPsi(*psiCfg.rearStrip, PSI_COLOR2, psiCfg.rearColor1, psiCfg.rearColor2);
+
+    Serial.println(F("✓ Digital PSIs activated (GPIO 8 & 9)."));
+  } else {
+    setFPSI(PSI_COLOR1);
+    setRPSI(PSI_COLOR2);
+    Serial.println(F("✓ Analog PSIs activated."));
+  }
+
   Serial.println(F("✓ Ready for commands.")); 
   
   // NEW: First-time welcome
