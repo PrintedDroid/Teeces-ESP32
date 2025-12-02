@@ -603,6 +603,24 @@ void setup() {
     setDigitalPsi(*psiCfg.frontStrip, PSI_COLOR1, psiCfg.frontColor1, psiCfg.frontColor2);
     setDigitalPsi(*psiCfg.rearStrip, PSI_COLOR2, psiCfg.rearColor1, psiCfg.rearColor2);
 
+    // Initialize PSI random state so animation continues smoothly without overwriting initial pattern
+    // Set currentSwipeRow to HPROW (completed state) and currentPattern to 1 (showing pattern 1)
+    // This prevents the animation from immediately wiping the initial display
+    unsigned long now = millis();
+    fpsiDigitalState.lastColorChange = now;
+    fpsiDigitalState.lastSwipe = now;
+    fpsiDigitalState.nextColorDelay = random(3, 8);  // Start with a reasonable delay
+    fpsiDigitalState.currentPattern = 1;             // Pattern 1 is currently displayed
+    fpsiDigitalState.currentSwipeRow = HPROW;        // Swipe is complete
+    fpsiDigitalState.isStuck = 0;
+
+    rpsiDigitalState.lastColorChange = now;
+    rpsiDigitalState.lastSwipe = now;
+    rpsiDigitalState.nextColorDelay = random(3, 8);
+    rpsiDigitalState.currentPattern = 0;             // Pattern 2 is currently displayed (opposite)
+    rpsiDigitalState.currentSwipeRow = HPROW;
+    rpsiDigitalState.isStuck = 0;
+
     Serial.println(F("✓ Digital PSIs activated (GPIO 8 & 9)."));
   } else {
     setFPSI(PSI_COLOR1);
