@@ -603,6 +603,24 @@ void setup() {
     setDigitalPsi(*psiCfg.frontStrip, PSI_COLOR1, psiCfg.frontColor1, psiCfg.frontColor2);
     setDigitalPsi(*psiCfg.rearStrip, PSI_COLOR2, psiCfg.rearColor1, psiCfg.rearColor2);
 
+    // Initialize PSI random state so animation continues smoothly without overwriting initial pattern
+    // Set currentSwipeRow to HPROW (completed state) and currentPattern to 1 (showing pattern 1)
+    // This prevents the animation from immediately wiping the initial display
+    unsigned long now = millis();
+    fpsiDigitalState.lastColorChange = now;
+    fpsiDigitalState.lastSwipe = now;
+    fpsiDigitalState.nextColorDelay = random(3, 8);  // Start with a reasonable delay
+    fpsiDigitalState.currentPattern = 1;             // Pattern 1 is currently displayed
+    fpsiDigitalState.currentSwipeRow = HPROW;        // Swipe is complete
+    fpsiDigitalState.isStuck = 0;
+
+    rpsiDigitalState.lastColorChange = now;
+    rpsiDigitalState.lastSwipe = now;
+    rpsiDigitalState.nextColorDelay = random(3, 8);
+    rpsiDigitalState.currentPattern = 0;             // Pattern 2 is currently displayed (opposite)
+    rpsiDigitalState.currentSwipeRow = HPROW;
+    rpsiDigitalState.isStuck = 0;
+
     Serial.println(F("✓ Digital PSIs activated (GPIO 8 & 9)."));
   } else {
     setFPSI(PSI_COLOR1);
@@ -1624,10 +1642,38 @@ void parseCommand(char* inputStr) {
     return;
   }
 
+  // NEW v4.2: Detect config menu commands entered outside config mode
+  // Check if user is trying to use a config command without entering config mode first
+  if (!isdigit(inputStr[0])) {
+    // List of common config commands that users might try
+    if (strcasecmp(inputStr, "wizard") == 0 || strcmp(inputStr, "w") == 0 ||
+        strcasecmp(inputStr, "diagnostics") == 0 || strcasecmp(inputStr, "diag") == 0 || strcmp(inputStr, "d") == 0 ||
+        strcasecmp(inputStr, "show") == 0 || strcmp(inputStr, "s") == 0 ||
+        strcasecmp(inputStr, "presets") == 0 ||
+        strcasecmp(inputStr, "colors") == 0 ||
+        strcasecmp(inputStr, "exit") == 0 || strcasecmp(inputStr, "quit") == 0 || strcmp(inputStr, "q") == 0 ||
+        strncasecmp(inputStr, "set ", 4) == 0 ||
+        strncasecmp(inputStr, "profile ", 8) == 0 ||
+        strncasecmp(inputStr, "preset ", 7) == 0 ||
+        strcmp(inputStr, "p1") == 0 || strcmp(inputStr, "p2") == 0 ||
+        strcmp(inputStr, "p3") == 0 || strcmp(inputStr, "p4") == 0 || strcmp(inputStr, "p5") == 0) {
+      Serial.println(F("\n╔════════════════════════════════════════════════════════╗"));
+      Serial.println(F("║  This is a CONFIG MENU command!                       ║"));
+      Serial.println(F("╠════════════════════════════════════════════════════════╣"));
+      Serial.println(F("║  Type '*' first to enter the configuration menu,      ║"));
+      Serial.println(F("║  then enter your command.                             ║"));
+      Serial.println(F("╚════════════════════════════════════════════════════════╝"));
+      return;
+    }
+  }
+
   // Parse address (1 or 2 digits)
   char addrStr[3];
   if (!isdigit(inputStr[pos])) {
     Serial.println(F("\nERROR: Command must start with address (0-5)"));
+    Serial.println(F("  JawaLite format: [address][command][argument]"));
+    Serial.println(F("  Example: 0T1 (all displays random mode)"));
+    Serial.println(F("  Type '*' for config menu, 'help' or '??' for commands"));
     Serial.write(0x7);
     return;
   }
