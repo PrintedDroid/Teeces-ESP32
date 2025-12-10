@@ -626,19 +626,21 @@ void setup() {
     setFPSI(PSI_COLOR1);
     setRPSI(PSI_COLOR2);
 
-    // Initialize analog PSI animation states (same as digital PSIs)
+    // Initialize analog PSI animation states
+    // Analog PSIs use pattern 0 and 5 (not 0 and 1 like digital)
+    // Pattern 5 with currentSwipeRow = HPROW means "swipe complete, waiting for next color change"
     unsigned long now = millis();
     fpsiAnalogState.lastColorChange = now;
     fpsiAnalogState.lastSwipe = now;
     fpsiAnalogState.nextColorDelay = random(3, 8);
-    fpsiAnalogState.currentPattern = 1;
+    fpsiAnalogState.currentPattern = 5;
     fpsiAnalogState.currentSwipeRow = HPROW;
     fpsiAnalogState.isStuck = 0;
 
     rpsiAnalogState.lastColorChange = now;
     rpsiAnalogState.lastSwipe = now;
     rpsiAnalogState.nextColorDelay = random(3, 8);
-    rpsiAnalogState.currentPattern = 0;
+    rpsiAnalogState.currentPattern = 5;
     rpsiAnalogState.currentSwipeRow = HPROW;
     rpsiAnalogState.isStuck = 0;
 
@@ -1032,14 +1034,14 @@ void randomAnalogPsi(PsiRandomState<LedControl> &state, byte deviceIndex, bool g
   
   if (state.currentSwipeRow < HPROW && state.currentPattern == 5) {
     state.lastSwipe = currentMillis;
-    state.device->setRow(deviceIndex, state.currentSwipeRow, 
+    state.device->setRow(deviceIndex, state.currentSwipeRow,
                          pgm_read_byte(&psiPatterns[state.currentSwipeRow + state.currentPattern]));
     state.currentSwipeRow++;
-  } else if (state.currentPattern == 0) {
+  } else if (state.currentPattern == 0 && state.currentSwipeRow < HPROW) {
     state.lastSwipe = currentMillis;
-    state.device->setRow(deviceIndex, state.currentSwipeRow, 
+    state.device->setRow(deviceIndex, state.currentSwipeRow,
                          pgm_read_byte(&psiPatterns[state.currentSwipeRow + state.currentPattern]));
-    state.currentSwipeRow--;
+    if (state.currentSwipeRow > 0) state.currentSwipeRow--;
   }
   
   if (getsStuck && state.currentSwipeRow == 2 && state.currentPattern == 5) {
@@ -2533,19 +2535,19 @@ void applyPreset(byte presetNum) {
     currentSettings.digitalPsi2_color1_index = psiColor1;
     currentSettings.digitalPsi2_color2_index = psiColor2;
   } else {
-    // Initialize analog PSI animation states
+    // Initialize analog PSI animation states (pattern 5 = swipe complete state)
     unsigned long now = millis();
     fpsiAnalogState.lastColorChange = now;
     fpsiAnalogState.lastSwipe = now;
     fpsiAnalogState.nextColorDelay = random(3, 8);
-    fpsiAnalogState.currentPattern = 1;
+    fpsiAnalogState.currentPattern = 5;
     fpsiAnalogState.currentSwipeRow = HPROW;
     fpsiAnalogState.isStuck = 0;
 
     rpsiAnalogState.lastColorChange = now;
     rpsiAnalogState.lastSwipe = now;
     rpsiAnalogState.nextColorDelay = random(3, 8);
-    rpsiAnalogState.currentPattern = 0;
+    rpsiAnalogState.currentPattern = 5;
     rpsiAnalogState.currentSwipeRow = HPROW;
     rpsiAnalogState.isStuck = 0;
   }
@@ -2709,19 +2711,19 @@ void runSetupWizard() {
     globalPsiOutput = PSI_ANALOG;
     preferences.putUChar("psiOutput", PSI_ANALOG);
 
-    // Initialize analog PSI animation states
+    // Initialize analog PSI animation states (pattern 5 = swipe complete state)
     unsigned long now = millis();
     fpsiAnalogState.lastColorChange = now;
     fpsiAnalogState.lastSwipe = now;
     fpsiAnalogState.nextColorDelay = random(3, 8);
-    fpsiAnalogState.currentPattern = 1;
+    fpsiAnalogState.currentPattern = 5;
     fpsiAnalogState.currentSwipeRow = HPROW;
     fpsiAnalogState.isStuck = 0;
 
     rpsiAnalogState.lastColorChange = now;
     rpsiAnalogState.lastSwipe = now;
     rpsiAnalogState.nextColorDelay = random(3, 8);
-    rpsiAnalogState.currentPattern = 0;
+    rpsiAnalogState.currentPattern = 5;
     rpsiAnalogState.currentSwipeRow = HPROW;
     rpsiAnalogState.isStuck = 0;
 
@@ -3417,20 +3419,20 @@ void parseAndSetSetting(const char* cmd) {
     globalPsiOutput = (PsiOutputType)val;
     preferences.putUChar("psiOutput", val);
 
-    // Initialize animation states when switching to analog
+    // Initialize animation states when switching to analog (pattern 5 = swipe complete state)
     if (val == PSI_ANALOG) {
       unsigned long now = millis();
       fpsiAnalogState.lastColorChange = now;
       fpsiAnalogState.lastSwipe = now;
       fpsiAnalogState.nextColorDelay = random(3, 8);
-      fpsiAnalogState.currentPattern = 1;
+      fpsiAnalogState.currentPattern = 5;
       fpsiAnalogState.currentSwipeRow = HPROW;
       fpsiAnalogState.isStuck = 0;
 
       rpsiAnalogState.lastColorChange = now;
       rpsiAnalogState.lastSwipe = now;
       rpsiAnalogState.nextColorDelay = random(3, 8);
-      rpsiAnalogState.currentPattern = 0;
+      rpsiAnalogState.currentPattern = 5;
       rpsiAnalogState.currentSwipeRow = HPROW;
       rpsiAnalogState.isStuck = 0;
     }
