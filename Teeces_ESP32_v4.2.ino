@@ -625,6 +625,25 @@ void setup() {
   } else {
     setFPSI(PSI_COLOR1);
     setRPSI(PSI_COLOR2);
+
+    // Initialize analog PSI animation states
+    // Analog PSIs use pattern 0 and 5 (not 0 and 1 like digital)
+    // Pattern 5 with currentSwipeRow = HPROW means "swipe complete, waiting for next color change"
+    unsigned long now = millis();
+    fpsiAnalogState.lastColorChange = now;
+    fpsiAnalogState.lastSwipe = now;
+    fpsiAnalogState.nextColorDelay = random(3, 8);
+    fpsiAnalogState.currentPattern = 5;
+    fpsiAnalogState.currentSwipeRow = HPROW;
+    fpsiAnalogState.isStuck = 0;
+
+    rpsiAnalogState.lastColorChange = now;
+    rpsiAnalogState.lastSwipe = now;
+    rpsiAnalogState.nextColorDelay = random(3, 8);
+    rpsiAnalogState.currentPattern = 5;
+    rpsiAnalogState.currentSwipeRow = HPROW;
+    rpsiAnalogState.isStuck = 0;
+
     Serial.println(F("✓ Analog PSIs activated."));
   }
 
@@ -1015,14 +1034,14 @@ void randomAnalogPsi(PsiRandomState<LedControl> &state, byte deviceIndex, bool g
   
   if (state.currentSwipeRow < HPROW && state.currentPattern == 5) {
     state.lastSwipe = currentMillis;
-    state.device->setRow(deviceIndex, state.currentSwipeRow, 
+    state.device->setRow(deviceIndex, state.currentSwipeRow,
                          pgm_read_byte(&psiPatterns[state.currentSwipeRow + state.currentPattern]));
     state.currentSwipeRow++;
-  } else if (state.currentPattern == 0) {
+  } else if (state.currentPattern == 0 && state.currentSwipeRow < HPROW) {
     state.lastSwipe = currentMillis;
-    state.device->setRow(deviceIndex, state.currentSwipeRow, 
+    state.device->setRow(deviceIndex, state.currentSwipeRow,
                          pgm_read_byte(&psiPatterns[state.currentSwipeRow + state.currentPattern]));
-    state.currentSwipeRow--;
+    if (state.currentSwipeRow > 0) state.currentSwipeRow--;
   }
   
   if (getsStuck && state.currentSwipeRow == 2 && state.currentPattern == 5) {
@@ -2509,14 +2528,30 @@ void applyPreset(byte presetNum) {
   
   globalPsiOutput = psiMode;
   preferences.putUChar("psiOutput", psiMode);
-  
+
   if (psiMode == PSI_DIGITAL) {
     currentSettings.digitalPsi1_color1_index = psiColor1;
     currentSettings.digitalPsi1_color2_index = psiColor2;
     currentSettings.digitalPsi2_color1_index = psiColor1;
     currentSettings.digitalPsi2_color2_index = psiColor2;
+  } else {
+    // Initialize analog PSI animation states (pattern 5 = swipe complete state)
+    unsigned long now = millis();
+    fpsiAnalogState.lastColorChange = now;
+    fpsiAnalogState.lastSwipe = now;
+    fpsiAnalogState.nextColorDelay = random(3, 8);
+    fpsiAnalogState.currentPattern = 5;
+    fpsiAnalogState.currentSwipeRow = HPROW;
+    fpsiAnalogState.isStuck = 0;
+
+    rpsiAnalogState.lastColorChange = now;
+    rpsiAnalogState.lastSwipe = now;
+    rpsiAnalogState.nextColorDelay = random(3, 8);
+    rpsiAnalogState.currentPattern = 5;
+    rpsiAnalogState.currentSwipeRow = HPROW;
+    rpsiAnalogState.isStuck = 0;
   }
-  
+
   applyBrightnessSettings();
   hasUnsavedChanges = true;
   
@@ -2675,6 +2710,23 @@ void runSetupWizard() {
   } else {
     globalPsiOutput = PSI_ANALOG;
     preferences.putUChar("psiOutput", PSI_ANALOG);
+
+    // Initialize analog PSI animation states (pattern 5 = swipe complete state)
+    unsigned long now = millis();
+    fpsiAnalogState.lastColorChange = now;
+    fpsiAnalogState.lastSwipe = now;
+    fpsiAnalogState.nextColorDelay = random(3, 8);
+    fpsiAnalogState.currentPattern = 5;
+    fpsiAnalogState.currentSwipeRow = HPROW;
+    fpsiAnalogState.isStuck = 0;
+
+    rpsiAnalogState.lastColorChange = now;
+    rpsiAnalogState.lastSwipe = now;
+    rpsiAnalogState.nextColorDelay = random(3, 8);
+    rpsiAnalogState.currentPattern = 5;
+    rpsiAnalogState.currentSwipeRow = HPROW;
+    rpsiAnalogState.isStuck = 0;
+
     Serial.println(F("✓ Analog PSI selected!"));
   }
   
@@ -3363,14 +3415,32 @@ void parseAndSetSetting(const char* cmd) {
   // *** GLOBAL PSI OUTPUT MODE ***
   if (strcmp(paramName, "psi_output") == 0) {
     if (!validateParameterWithHints(paramName, val, globalPsiOutput)) return;
-    
+
     globalPsiOutput = (PsiOutputType)val;
     preferences.putUChar("psiOutput", val);
-    
+
+    // Initialize animation states when switching to analog (pattern 5 = swipe complete state)
+    if (val == PSI_ANALOG) {
+      unsigned long now = millis();
+      fpsiAnalogState.lastColorChange = now;
+      fpsiAnalogState.lastSwipe = now;
+      fpsiAnalogState.nextColorDelay = random(3, 8);
+      fpsiAnalogState.currentPattern = 5;
+      fpsiAnalogState.currentSwipeRow = HPROW;
+      fpsiAnalogState.isStuck = 0;
+
+      rpsiAnalogState.lastColorChange = now;
+      rpsiAnalogState.lastSwipe = now;
+      rpsiAnalogState.nextColorDelay = random(3, 8);
+      rpsiAnalogState.currentPattern = 5;
+      rpsiAnalogState.currentSwipeRow = HPROW;
+      rpsiAnalogState.isStuck = 0;
+    }
+
     Serial.print(F("\n✓ Global PSI output set to: "));
     Serial.println(val == 0 ? F("ANALOG") : F("DIGITAL"));
     Serial.println(F("(Saved globally, applies to all profiles)"));
-    
+
     showSmartSuggestion(val == 0 ? "psi_output_analog" : "psi_output_digital");
     hasUnsavedChanges = false;
     return;
