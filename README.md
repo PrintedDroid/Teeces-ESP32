@@ -1,27 +1,51 @@
-# Teeces ESP32 Logic Display Controller v4.2
-**Advanced ESP32-C3 based Teeces display controller for R2-D2 logic displays and PSI indicators**
+# Teeces ESP32 Logic Display Controller v4.6
+**Advanced ESP32-S3 Mini based Teeces display controller for R2-D2 logic displays, PSI indicators, and holoprojectors**
 
-## 🤖 Project Overview
+## Project Overview
 
-This enhanced controller brings your R2-D2's logic displays to life with smooth animations, dynamic PSI control, and comprehensive JawaLite protocol support. Designed for builders who demand professional results with maximum flexibility.
+This enhanced controller brings your R2-D2's logic displays to life with smooth animations, dynamic PSI control, holoprojector effects, and comprehensive JawaLite protocol support. Designed for builders who demand professional results with maximum flexibility.
 
 ### Key Features
 
-- **📺 Multi-Display Control** - Front Logic Displays (TFLD/BFLD), Rear Logic Display (RLD)
-- **💡 Dual PSI Support** - Analog (MAX7219) or Digital (NeoPixel/WS2812B) with real-time color control
-- **⚡ JawaLite Protocol** - Full compatibility + v4.2 extensions (L/C/T99 commands)
-- **🎨 Dynamic PSI Colors** - 12-color palette with instant switching via C-Command
-- **💫 Brightness Control** - Direct L-Command for real-time intensity adjustment
-- **✨ Advanced Effects** - Alarm, Leia, March, Failure animations
-- **💾 Profile Management** - 5 persistent profiles with flash storage
-- **🎮 Interactive Config Menu** - Complete serial CLI with shortcuts and verbose mode
-- **🔧 Hardware Diagnostics** - Built-in testing for all components
-- **📝 Text Scrolling** - Latin + Aurabesh alphabets
-- **⚙️ Setup Wizard** - Guided first-time configuration
+- **Multi-Display Control** - Front Logic Displays (TFLD/BFLD), Rear Logic Display (RLD)
+- **Dual PSI Support** - Analog (MAX7219) or Digital (NeoPixel/WS2812B) with real-time color control
+- **3 Holoprojector Outputs** - NeoPixel strips with 9 LED effects (rainbow, flicker, Leia, etc.)
+- **JawaLite Protocol** - Full compatibility + extensions (L/C/H/T99 commands)
+- **MarcDuino Holo Commands** - *ON/*OF/*ST/*RD for holo control
+- **FlthyHP Protocol** - A/F/R/T/S command parsing for holo integration
+- **Dynamic PSI Colors** - 12-color palette with instant switching via C-Command
+- **Brightness Control** - Direct L-Command for real-time intensity adjustment
+- **Advanced Effects** - Alarm, Leia, March, Failure animations
+- **Profile Management** - 5 persistent profiles with flash storage
+- **Interactive Config Menu** - Complete serial CLI with shortcuts and verbose mode
+- **Hardware Diagnostics** - Built-in testing for all components
+- **Text Scrolling** - Latin + Aurabesh alphabets
+- **Setup Wizard** - Guided first-time configuration
 
 ---
 
-## 📝 Changelog
+## Changelog
+
+### Version 4.6 (2026-04-06)
+
+**Holoprojectors, Pin Correction & Platform Upgrade**
+
+#### Holoprojector Support
+- 3 NeoPixel Holoprojector outputs (Front, Rear, Top) with 9 LED effects
+- H-Command: Direct Holo control (6H1=on, 0H0=off, 7H3=rainbow)
+- MarcDuino * commands for Holo control (*ON00-03, *OF00-03, *ST00, *RD)
+- FlthyHP protocol parser (A/F/R/T/S commands)
+- Holo auto-twitch animation
+- Configurable LEDs per Holo (default: 7 NeoPixels each)
+
+#### Platform & Pin Changes
+- Upgraded from ESP32-C3 Mini to ESP32-S3 Mini
+- Corrected all pin assignments to match actual S3 Mini board wiring
+- I2C pins (SDA=GPIO9, SCL=GPIO10) defined as reserved for future expansion
+- All GPIO references in diagnostics and documentation updated
+
+#### Breaking Changes
+None! All existing JawaLite commands work unchanged. Holoprojector commands are additive.
 
 ### Version 4.2 (2025-11-05)
 
@@ -29,7 +53,7 @@ This enhanced controller brings your R2-D2's logic displays to life with smooth 
 
 This major update extends the JawaLite protocol with three powerful new commands and significantly improves the user experience with better error handling, shortcuts, and debugging tools.
 
-#### ⚡ New JawaLite Commands
+#### New JawaLite Commands
 
 **1. L-Command - Brightness Control**
 - Direct brightness control without entering config mode
@@ -57,13 +81,13 @@ This major update extends the JawaLite protocol with three powerful new commands
 - Returns displays to normal operation (EFF_NORM)
 - Cleaner alternative to implicit state changes
 
-#### 💬 Enhanced CLI Features
+#### Enhanced CLI Features
 
 **4. Descriptive Error Messages**
 - **Before**: Silent BEL tone (0x07)
 - **After**: Clear error messages with format examples
   ```
-  ERROR: Unknown command 'X'. Valid: T/M/P/R/S/L/C/D. Type '??' for help.
+  ERROR: Unknown command 'X'. Valid: T/M/P/R/S/L/C/D/H. Type '??' for help.
   ERROR: L command requires argument (0-15 for brightness)
   ERROR: Color index must be 0-11
   ```
@@ -111,23 +135,7 @@ Power-user shortcuts for faster configuration:
   ```
 - **Use Cases**: Troubleshooting parsing errors, monitoring execution time, learning protocol structure
 
-#### 📖 Documentation Updates
-
-**9. Comprehensive README**
-- Section 4.7: L-Commands (Brightness Control)
-- Section 4.8: C-Commands (Digital PSI Color Control)
-- Section 4.9: Quick Help
-- Section 5.5: Shorthand Commands
-- Section 5.6: Verbose Debug Mode
-- Complete color palette reference
-- Usage examples for all new features
-
-**10. Updated Boot Message**
-- Displays v4.2 features on startup
-- Shows new protocol extensions
-- Lists CLI improvements
-
-#### 🔧 Implementation Details
+#### Implementation Details
 
 - **Global Variable**: `verboseMode` (bool) tracks debug state
 - **Enhanced Parser**: `parseCommand()` with debug checkpoints
@@ -135,14 +143,7 @@ Power-user shortcuts for faster configuration:
 - **Shortcuts**: 14 new aliases in `handleConfigCommands()`
 - **Zero Performance Impact**: Debug code only executes when verbose mode enabled
 
-#### ⚠️ Breaking Changes
-
-None! All changes are backward compatible:
-- ✅ All existing JawaLite commands work unchanged
-- ✅ BEL tone preserved for legacy systems
-- ✅ New commands optional (old code continues to work)
-
-#### 📊 Feature Metrics
+#### Feature Metrics
 
 | Feature | Lines of Code | Performance Impact |
 |---------|---------------|-------------------|
@@ -160,7 +161,7 @@ None! All changes are backward compatible:
 
 **User Experience & Configuration Management**
 
-#### 🎨 User-Friendly Features
+#### User-Friendly Features
 
 **1. Setup Wizard**
 - Guided first-time configuration
@@ -194,19 +195,13 @@ None! All changes are backward compatible:
 - Invalid value prevention
 - Current value comparison
 
-#### 💾 Profile Management
+#### Profile Management
 
 - **Profile 1 (Standard)**: Read-only default profile
 - **Profile 2 (White/Pink)**: Read-only digital PSI preset
 - **Profiles 3-5 (User)**: Fully customizable, persistently saved
 
-Profile Commands:
-- `profile show` - Display active profile
-- `profile load <1-5>` - Switch to profile
-- `profile save` - Save changes (profiles 3-5 only)
-- `profile reset <3-5>` - Reset user profile
-
-#### 📊 Performance Improvements
+#### Performance Improvements
 
 - Optimized EEPROM wear leveling
 - Reduced unnecessary flash writes
@@ -215,16 +210,17 @@ Profile Commands:
 
 ---
 
-## 🔧 Hardware Requirements
+## Hardware Requirements
 
 ### Core Components
-- **ESP32-C3 Mini** development board
+- **ESP32-S3 Mini** development board
 - **MAX7219 LED Matrix Controllers** (daisy-chained)
   - 5x9 matrices for Front Logic Displays (TFLD/BFLD)
   - 5x27 matrix for Rear Logic Display (RLD)
 - **PSIs** (choose one):
   - **Analog**: LED arrays driven by MAX7219 chain
   - **Digital**: Two 26-LED NeoPixel/WS2812B strips (default)
+- **3x NeoPixel Holoprojector strips** (7 LEDs each, configurable)
 - **5V Power Supply** (adequate for displays - minimum 2A recommended)
 
 ### Recommended Carrier Board
@@ -232,43 +228,44 @@ Profile Commands:
 
 ---
 
-## 📋 Pin Configuration
+## Pin Configuration
 
-ESP32-C3 Mini Pin Assignments:
+ESP32-S3 Mini Pin Assignments:
 
-- **Rear Chain (RLD + Rear Analog PSI):**
-  - DATA: GPIO7
-  - CLK: GPIO6
-  - CS: GPIO5
-
-- **Front Chain (TFLD + BFLD + Front Analog PSI):**
-  - DATA: GPIO4
-  - CLK: GPIO3
-  - CS: GPIO2
-
-- **Digital PSI 1 (Front):**
-  - DATA: GPIO8
-
-- **Digital PSI 2 (Rear):**
-  - DATA: GPIO9
+| GPIO | Function | Type |
+|------|----------|------|
+| 1 | Front Chain DATA | MAX7219 SPI |
+| 2 | Front Chain CS | MAX7219 SPI |
+| 3 | Front Chain CLK | MAX7219 SPI |
+| 4 | Rear Chain DATA | MAX7219 SPI |
+| 5 | Rear Chain CS | MAX7219 SPI |
+| 6 | Rear Chain CLK | MAX7219 SPI |
+| 7 | Digital PSI 1 (Front) | NeoPixel |
+| 8 | Digital PSI 2 (Rear) | NeoPixel |
+| 9 | SDA (reserved) | I2C |
+| 10 | SCL (reserved) | I2C |
+| 11 | Front Holo | NeoPixel |
+| 12 | Rear Holo | NeoPixel |
+| 13 | Top Holo | NeoPixel |
+| RX/TX | Serial Terminal | UART 9600 |
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Method 1: Arduino IDE Setup
 
 1. **Install ESP32 board support:**
-   - File → Preferences → Additional Board Manager URLs
+   - File > Preferences > Additional Board Manager URLs
    - Add: `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`
-   - Tools → Board → Board Manager → Search "ESP32" → Install
+   - Tools > Board > Board Manager > Search "ESP32" > Install
 
-2. **Board Configuration for ESP32-C3:**
-   - Board: "ESP32C3 Dev Module"
+2. **Board Configuration for ESP32-S3 Mini:**
+   - Board: "ESP32S3 Dev Module" (or "Lolin S3 Mini")
    - Upload Speed: "921600"
    - USB CDC On Boot: "Enabled"
-   - Flash Size: "4MB"
-   - Partition Scheme: "Default 4MB with spiffs"
+   - Flash Size: "4MB" or "8MB"
+   - Partition Scheme: "Default"
 
 3. **Required Libraries:**
    Install via Arduino Library Manager:
@@ -298,6 +295,9 @@ The controller responds to standard "JawaLite" protocol commands at 9600 baud. T
 | `3` | Rear LD |
 | `4` | Front PSI |
 | `5` | Rear PSI |
+| `6` | Front Holo |
+| `7` | Rear Holo |
+| `8` | Top Holo |
 
 ### 4.2. T Commands (Display State)
 | Command | Function |
@@ -311,7 +311,7 @@ The controller responds to standard "JawaLite" protocol commands at 9600 baud. T
 | `T11` | March effect |
 | `T20` | Off (display blank) |
 | `T92` | Bargraph mode |
-| `T99` | **[NEW v4.2]** Stop all effects, return to normal operation |
+| `T99` | Stop all effects, return to normal operation |
 | `T100` | Text mode (displays text set by `M` command) |
 
 ### 4.3. M Commands (Text)
@@ -337,7 +337,7 @@ The controller responds to standard "JawaLite" protocol commands at 9600 baud. T
 | `S3` | Color 2 |
 | `S4` | Off |
 
-### 4.7. L Commands (Brightness Control) **[NEW v4.2]**
+### 4.7. L Commands (Brightness Control)
 
 The L-Command provides direct, immediate brightness control without entering the configuration menu. This is especially useful for dynamic lighting adjustments (e.g., during lightsaber battles or environmental changes).
 
@@ -370,7 +370,7 @@ The L-Command provides direct, immediate brightness control without entering the
 - **Power Saving**: Reduce brightness when idle
 - **Show Synchronization**: Match brightness to audio/visual cues
 
-### 4.8. C Commands (Digital PSI Color Control) **[NEW v4.2]**
+### 4.8. C Commands (Digital PSI Color Control)
 
 The C-Command allows real-time color changes for digital PSI strips without entering configuration mode. This enables dynamic color synchronization with events, music, or other droid behaviors.
 
@@ -408,18 +408,65 @@ The C-Command allows real-time color changes for digital PSI strips without ente
 
 **Note:** Color changes apply to **digital PSI strips only**. For analog PSI brightness, use the L-Command (4.7).
 
-### 4.9. Quick Help
+### 4.9. H Commands (Holoprojector Control)
+
+The H-Command provides direct control over the 3 NeoPixel holoprojector outputs.
+
+**Format:** `[address]H[state]`
+
+| Parameter | Description | Valid Range |
+| :--- | :--- | :--- |
+| `address` | Holo target | 0=all, 6=Front, 7=Rear, 8=Top |
+| `state` | Effect | 0-8 (see table below) |
+
+**States:**
+| State | Effect |
+| :---: | :--- |
+| 0 | Off |
+| 1 | On (white) |
+| 2 | Color |
+| 3 | Rainbow cycle |
+| 4 | Flicker |
+| 5 | Leia effect |
+| 6 | Color cycle |
+| 7 | Dim pulse |
+| 8 | Short circuit |
+
+**Examples:**
+```
+0H1    → All holos on (white)
+6H3    → Front holo rainbow
+7H0    → Rear holo off
+8H4    → Top holo flicker
+0H0    → All holos off
+```
+
+### 4.10. MarcDuino Holo Commands
+
+Standard MarcDuino holo protocol is supported for compatibility with existing systems.
+
+| Command | Function |
+| :--- | :--- |
+| `*ON00` | All holos on |
+| `*ON01` | Front holo on |
+| `*ON02` | Rear holo on |
+| `*ON03` | Top holo on |
+| `*OF00` | All holos off |
+| `*OF01` | Front holo off |
+| `*OF02` | Rear holo off |
+| `*OF03` | Top holo off |
+| `*ST00` | Reset all holos |
+| `*RD` | Random holo flicker |
+
+### 4.11. Quick Help
 
 Type `??` or `help` in normal operation mode to display a quick reference of all JawaLite commands directly in the serial monitor.
 
 **Example Output:**
 ```
-╔══════════════════════════════════════════════════════════╗
-║              JawaLite Protocol Quick Reference           ║
-╚══════════════════════════════════════════════════════════╝
-
 Format: [address][command][argument]
   Address: 0=All, 1=TopFLD, 2=BottomFLD, 3=RLD, 4=FPSI, 5=RPSI
+           6=FrontHolo, 7=RearHolo, 8=TopHolo
 
 Commands:
   T[arg]  - Display state (0=test, 1=random, 20=off, 99=stop effects, 100=text)
@@ -427,18 +474,23 @@ Commands:
   P[arg]  - Alphabet (60=Latin, 61=Aurabesh)
   R[arg]  - Random style (0-6)
   S[arg]  - PSI state (0=test, 1=random, 2=color1, 3=color2, 4=off)
-  L[arg]  - Brightness (0-15) [NEW v4.2]
-  C[p][c] - PSI color: pattern(1-2) + color(0-11) [NEW v4.2]
-  D       - Dimension command
+  L[arg]  - Brightness (0-15)
+  C[p][c] - PSI color: pattern(1-2) + color(0-11)
+  H[arg]  - Holo (0=off, 1=on, 2=color, 3=rainbow, 4=flicker)
+
+MarcDuino Holo commands:
+  *ON00-03  Holo on (0=all, 1=front, 2=rear, 3=top)
+  *OF00-03  Holo off
+  *ST00     Reset all holos
+  *RD       Random flicker
 
 Examples:
-  0T1      → All displays to random mode
-  1MHELLO  → Show 'HELLO' on top FLD
-  0L10     → Set all brightness to 10
-  4C111    → Front PSI pattern 1 = color 11 (white)
-  0T99     → Stop all effects
-
-Type '*' to enter configuration menu
+  0T1      All displays to random mode
+  1MHELLO  Show 'HELLO' on top FLD
+  0L10     Set all brightness to 10
+  4C111    Front PSI pattern 1 = color 11 (white)
+  6H3      Front holo rainbow
+  0H1      All holos on
 ```
 
 ---
@@ -502,17 +554,18 @@ Config> profile save    ← Save to current profile
 
 If you are troubleshooting, the `diagnostics` command will test all components.
 - Flash Memory
-- Rear Logic Display
-- Front Logic Displays
+- Rear Logic Display (GPIO 4/6/5)
+- Front Logic Displays (GPIO 1/3/2)
 - Analog PSIs (Rear and Front)
-- Digital PSI 1 (GPIO8) and 2 (GPIO9)
+- Digital PSI 1 (GPIO7) and 2 (GPIO8)
+- Holoprojectors (GPIO 11/12/13)
 - Watchdog Timer
 
 The tool also provides troubleshooting tips for common wiring issues.
 
-### 5.5. Shorthand Commands **[NEW v4.2]**
+### 5.5. Shorthand Commands
 
-For faster configuration, v4.2 introduces convenient shorthand commands:
+For faster configuration, convenient shorthand commands:
 
 | Shorthand | Full Command | Description |
 | :--- | :--- | :--- |
@@ -534,7 +587,7 @@ Config> d         ← Runs diagnostics
 Config> q         ← Exits config menu
 ```
 
-### 5.6. Verbose Debug Mode **[NEW v4.2]**
+### 5.6. Verbose Debug Mode
 
 The verbose mode provides detailed debug information about command processing, which is useful for troubleshooting and development.
 
@@ -573,7 +626,7 @@ Command: T, Address: 0, Arg: 1
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Common Issues Quick Reference
 
@@ -582,22 +635,29 @@ Command: T, Address: 0, Arg: 1
 | No serial output | Check baud rate (9600), verify USB connection |
 | Displays not working | Verify MAX7219 wiring, check power supply |
 | PSI not responding | Check PSI mode (analog/digital), verify pin connections |
+| Holos not working | Check GPIO 11/12/13, verify 5V power to NeoPixel strips |
 | Random crashes | Update to latest version, check power supply stability |
 | Configuration lost | Use `profile save` command, check EEPROM status |
 
 ### Hardware Issues
 
 **Displays Not Working:**
-- ✅ Check MAX7219 wiring (DATA, CLK, CS)
-- ✅ Verify power supply (5V, adequate current)
-- ✅ Test with `diagnostics` command
-- ✅ Check SPI connections
+- Check MAX7219 wiring: Front (DATA=GPIO1, CLK=GPIO3, CS=GPIO2), Rear (DATA=GPIO4, CLK=GPIO6, CS=GPIO5)
+- Verify power supply (5V, adequate current)
+- Test with `diagnostics` command
+- Check SPI connections
 
 **PSI Not Responding:**
-- ✅ Verify PSI mode (analog/digital) with `show` command
-- ✅ Check pin connections (GPIO8/GPIO9 for digital)
-- ✅ Test with `4S1` (Front PSI random) command
-- ✅ Verify NeoPixel power (5V) for digital PSIs
+- Verify PSI mode (analog/digital) with `show` command
+- Check pin connections (GPIO7/GPIO8 for digital)
+- Test with `4S1` (Front PSI random) command
+- Verify NeoPixel power (5V) for digital PSIs
+
+**Holos Not Working:**
+- Check NeoPixel wiring (Front=GPIO11, Rear=GPIO12, Top=GPIO13)
+- Verify 5V power to holo strips
+- Test with `0H1` (all holos on) or `*ON00`
+- Check LED count configuration (default: 7 per holo)
 
 ### Software Issues
 
@@ -609,14 +669,14 @@ Config> save            ← Save configuration
 ```
 
 **Serial Communication Issues:**
-- ✅ Set baud rate to 9600
-- ✅ Select correct COM port
-- ✅ Check USB cable quality
-- ✅ Press EN/RST button if ESP32 doesn't respond
+- Set baud rate to 9600
+- Select correct COM port
+- Check USB cable quality
+- Press EN/RST button if ESP32 doesn't respond
 
 ---
 
-## 📊 System Monitoring
+## System Monitoring
 
 ### Status Information
 
@@ -636,32 +696,33 @@ Config> verbose off     ← Disable logging
 
 ---
 
-## 🎯 Performance Optimization
+## Performance Optimization
 
 ### Response Time
 - L-Command: Instant brightness application
 - C-Command: Applied on next PSI update cycle
+- H-Command: Instant holo state change
 - T99-Command: Immediate effect stop
 
 ### Memory Usage
-- Flash: ~350KB program + 64KB EEPROM
-- RAM: Dynamic allocation for displays
-- No memory leaks in v4.2
+- Flash: ~380KB program + 64KB EEPROM
+- RAM: Dynamic allocation for displays + holo animations
+- No memory leaks
 
 ---
 
-## 🚀 Future Expansion
+## Future Expansion
 
 ### Planned Features
+- I2C PCA9685 servo control for holo pan/tilt
+- CAN bus integration for AstroCan Pro X system
+- WebUI control via AstroCan Gateway
 - Enhanced animation effects
-- External sensor integration
 - OTA (Over-The-Air) updates
-- Bluetooth control
-- Mobile app integration
 
 ---
 
-## 📞 Support
+## Support
 
 ### Getting Help
 
@@ -680,20 +741,20 @@ Config> verbose on      ← Enable debug mode
 
 ---
 
-## 📜 License & Credits
+## License & Credits
 
 ### Project Credits
 - **Software Development**: Printed-Droid.com
-- **Hardware Compatibility**: Printed Droid Teeces32 Boards (ESP32-C3 Mini, MAX7219, NeoPixel)
+- **Hardware Compatibility**: Printed Droid Teeces32 Boards (ESP32-S3 Mini, MAX7219, NeoPixel)
 
 ### Open Source Libraries
 - **LedControl**: MAX7219 LED control
 - **Adafruit NeoPixel**: WS2812B/NeoPixel LED control
-- **ESP32 Arduino Core**: ESP32-C3 support
+- **ESP32 Arduino Core**: ESP32-S3 support
 
 ### Disclaimer
 
-⚠️ **IMPORTANT SAFETY NOTICE** ⚠️
+**IMPORTANT SAFETY NOTICE**
 
 This project involves electrical components and LED displays. Users are responsible for:
 
@@ -707,6 +768,6 @@ This project involves electrical components and LED displays. Users are responsi
 
 ---
 
-**May the Force be with your build!** 🌟
+**May the Force be with your build!**
 
 *For the latest updates and community support, visit: https://github.com/PrintedDroid/Teeces-ESP32*
