@@ -1,5 +1,10 @@
 # Teeces ESP32 Logic Display Controller
 
+<!-- webflash-notice -->
+> **Notice:** Future versions of this firmware are released as ready-to-flash web installer in the [Printed Droid Firmware Flasher](https://www.printed-droid.com/firmware-flasher/). The documentation (commands, usage, settings) will continue to be updated here and in the wiki; the source code in this repository remains available in its current state but will no longer be updated.
+>
+> **Why:** Printed Droid has shared its source code openly for years. In the meantime, more and more projects in the community build on openly shared work but release their own results as closed source only. Open source works in both directions – this one-way street is not something we will keep supplying.
+
 **ESP32-based Teeces controllers for R2-D2 logic displays, PSI indicators, and holoprojectors — with full JawaLite protocol support.**
 
 This repository contains **two standalone Arduino sketches** for different hardware
